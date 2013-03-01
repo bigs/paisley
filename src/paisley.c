@@ -11,7 +11,9 @@
 #include <fcntl.h>
 #include <ev.h>
 
-#define BUFFER_SIZE 1024
+#include "buffer.h"
+#include "user_list.h"
+#include "const.h"
 
 int set_nonblocking(int fd)
 {
@@ -28,139 +30,7 @@ void client_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 int write_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 
-struct buffer {
-  char *data;
-  int len;
-};
-
-struct buffer * new_buffer() {
-  struct buffer *buffer = (struct buffer *) malloc(sizeof(struct buffer));
-  buffer->data = (char *) malloc(sizeof(char) * BUFFER_SIZE);
-  buffer->len = BUFFER_SIZE;
-  bzero(buffer->data, buffer->len);
-
-  return buffer;
-}
-
-void free_buffer(struct buffer *buffer) {
-  free(buffer->data);
-  free(buffer);
-  return;
-}
-
-void buffer_append(struct buffer *buffer, char *data) {
-  int buf_len = strlen(buffer->data);
-  if (strlen(data) > (buffer->len - buf_len - 1)) {
-    int new_len = buffer->len * 2;
-    while (strlen(data) > (new_len - buf_len - 1)) {
-      new_len *= 2;
-    }
-    char *new_buff = (char *) malloc(sizeof(char) * new_len);
-    bcopy(buffer->data, new_buff, buffer->len);
-    bzero(buffer->data + buffer->len, new_len - buffer->len);
-    free(buffer->data);
-    buffer->data = new_buff;
-    buffer->len = new_len;
-  } else if ((strlen(data) + buf_len) < (buffer->len / 4)) {
-    int new_len = buffer->len / 2;
-    char *new_buff = (char *) malloc(sizeof(char) * new_len);
-    bzero(new_buff, new_len);
-    bcopy(buffer->data, new_buff, buf_len);
-    free(buffer->data);
-    buffer->data = new_buff;
-    buffer->len = new_len;
-  }
-
-  bcopy(data, buffer->data + buf_len, strlen(data));
-}
-
-struct user {
-  // user info
-  char *name;
-
-  // buffers
-  struct buffer *in;
-  struct buffer *out;
-};
-
-struct user_node {
-  struct user *user;
-  struct user_node *prev;
-  struct user_node *next;
-};
-
 struct user_node *users_head;
-
-struct user * new_user() {
-  struct user *user = (struct user *) malloc(sizeof (struct user));
-  bzero(user, sizeof(user));
-
-  user->out = new_buffer();
-  user->in = new_buffer();
-
-  return user;
-}
-
-void free_user(struct user *user) {
-  free_buffer(user->out);
-  free_buffer(user->in);
-  if (user->name) free(user->name);
-  free(user);
-}
-
-struct user_node * insert_user(struct user_node **head, struct user *user) {
-  struct user_node *node = (struct user_node *) malloc(sizeof(struct user_node));
-  node->user = user;
-  node->next = NULL;
-
-  int count = 1;
-  if (!*head) {
-    node->prev = NULL;
-    *head = node;
-  } else {
-    struct user_node *ptr = *head;
-    count++;
-    while (ptr->next != NULL) {
-      ptr = ptr->next;
-      count++;
-    }
-    ptr->next = node;
-    node->prev = ptr;
-  }
-
-  return node;
-}
-
-struct user * get_user(struct user_node *head, char *name) {
-  struct user_node *ptr;
-  struct user *user = NULL;
-
-  for (ptr = head; ptr != NULL; ptr = ptr->next) {
-    if (strcmp(ptr->user->name, name) == 0) {
-      user = ptr->user;
-      break;
-    }
-  }
-
-  return user;
-}
-
-void delete_node(struct user_node *node) {
-  if (node->prev) {
-    node->prev->next = node->next;
-  } else {
-    if (node->next)
-      users_head = node->next;
-    else
-      users_head = NULL;
-  }
-  if (node->next) {
-    node->next->prev = node->prev;
-  }
-
-  free_user(node->user);
-  free(node);
-}
 
 int broadcast_msg(struct user_node *head, struct user_node *src, char *msg) {
   int count = 0;
@@ -168,7 +38,7 @@ int broadcast_msg(struct user_node *head, struct user_node *src, char *msg) {
 
   for (ptr = head; ptr != NULL; ptr = ptr->next) {
     if (ptr == src) continue;
-    buffer_append(ptr->user->out, msg);
+    append_buffer(ptr->user->out, msg);
     count++;
   }
 
@@ -307,12 +177,12 @@ int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     // Read socket is in charge of closing
     printf("Socket %d closed.\n", watcher->fd);
     ev_io_stop(loop, watcher);
-    delete_node(node);
+    delete_node(&users_head, node);
     free(watcher);
     return 0;
   }
 
-  buffer_append(user->in, buf);
+  append_buffer(user->in, buf);
 
   char *pos;
   char *msg;
