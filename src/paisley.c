@@ -14,8 +14,9 @@
 
 void listen_loop(int port);
 void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
-void read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
-void write_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
+void client_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
+int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
+int write_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 
 struct buffer {
   char *data;
@@ -78,10 +79,7 @@ struct user_node {
   struct user_node *next;
 };
 
-struct node_pair {
-  struct user_node *node;
-  struct ev_io *watcher;
-};
+struct user_node *users_head;
 
 struct user * new_user() {
   struct user *user = (struct user *) malloc(sizeof (struct user));
@@ -140,6 +138,11 @@ struct user * get_user(struct user_node *head, char *name) {
 void delete_node(struct user_node *node) {
   if (node->prev) {
     node->prev->next = node->next;
+  } else {
+    if (node->next)
+      users_head = node->next;
+    else
+      users_head = NULL;
   }
   if (node->next) {
     node->next->prev = node->prev;
@@ -156,14 +159,11 @@ int broadcast_msg(struct user_node *head, struct user_node *src, char *msg) {
   for (ptr = head; ptr != NULL; ptr = ptr->next) {
     if (ptr == src) continue;
     buffer_append(ptr->user->out, msg);
-    printf("new buffer: %s\n", ptr->user->out->data);
     count++;
   }
 
   return count;
 }
-
-struct user_node *users_head;
 
 int main(int argc, char **argv) {
   char *port = NULL;
@@ -243,11 +243,9 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
   socklen_t client_len = sizeof(client_addr);
   int sock;
 
-  struct ev_io *w_client_r = (struct ev_io *) malloc(sizeof(struct ev_io));
-  struct ev_io *w_client_w = (struct ev_io *) malloc(sizeof(struct ev_io));
+  struct ev_io *w_client = (struct ev_io *) malloc(sizeof(struct ev_io));
   struct user_node *node = insert_user(&users_head, new_user());
-  w_client_r->data = (void *) node;
-  w_client_w->data = (void *) node;
+  w_client->data = (void *) node;
 
   if (EV_ERROR & revents) {
     perror("Invalid event in accept.");
@@ -261,19 +259,27 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     return;
   }
   
-  ev_io_init(w_client_r, read_cb, sock, EV_READ);
-  ev_io_init(w_client_w, write_cb, sock, EV_WRITE);
-  ev_io_start(loop, w_client_r);
-  ev_io_start(loop, w_client_w);
+  ev_io_init(w_client, client_cb, sock, EV_READ | EV_WRITE);
+  ev_io_start(loop, w_client);
 }
 
-void read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
+void client_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
+  int res = 0;
+  if (revents & EV_READ) {
+    res = read_cb(loop, watcher, revents);
+  }
+  if (revents & EV_WRITE && res) {
+    write_cb(loop, watcher, revents);
+  }
+}
+
+int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
   struct user_node *node = (struct user_node *) watcher->data;
   struct user *user = node->user;
 
   if (EV_ERROR & revents) {
     perror("Invalid event in read.");
-    return;
+    return 0;
   }
 
   char buf[BUFFER_SIZE];
@@ -282,14 +288,14 @@ void read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
 
   if (read < 0) {
     perror("Read error in read.");
-    return;
+    return 0;
   } else if (read == 0) {
     // Read socket is in charge of closing
     printf("Socket %d closed.\n", watcher->fd);
     ev_io_stop(loop, watcher);
     delete_node(node);
     free(watcher);
-    return;
+    return 0;
   }
 
   buffer_append(user->in, buf);
@@ -313,34 +319,37 @@ void read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
       }
     } else {
       // broadcast
-      int _len = strlen(msg) + 3;
+      int _len = strlen(msg) + strlen(user->name) + 2 + 3;
       char *_msg = (char *) malloc(sizeof(char) * _len);
-      snprintf(_msg, _len, "%s\r\n\0", msg);
-      printf("msg: %s", _msg);
+      snprintf(_msg, _len, "%s: %s\r\n\0", user->name, msg);
       int count = broadcast_msg(users_head, node, _msg);
       printf("%s broadcast to %d users.\n", user->name, count);
     }
 
     free(msg);
   }
+
+  return 1;
 }
 
-void write_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
+int write_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
   struct user_node *node = (struct user_node *) watcher->data;
   struct user *user = node->user;
   struct buffer *buffer = user->out;
 
   if (EV_ERROR & revents) {
     perror("Invalid event in read.");
-    return;
+    return 0;
   }
 
   if (buffer->data[0] == 0) {
-    return;
+    return 0;
   }
 
   int n = send(watcher->fd, buffer->data, strlen(buffer->data) + 1, 0);
+  printf("Delivered message.\n");
 
   bzero(buffer->data, buffer->len); 
+  return 1;
 }
 
