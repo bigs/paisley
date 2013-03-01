@@ -8,9 +8,19 @@
 #include <unistd.h>
 #include <strings.h>
 #include <netinet/in.h>
+#include <fcntl.h>
 #include <ev.h>
 
 #define BUFFER_SIZE 1024
+
+int set_nonblocking(int fd)
+{
+  int flags;
+
+  if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
+    flags = 0;
+  return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}  
 
 void listen_loop(int port);
 void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
@@ -217,6 +227,8 @@ void listen_loop(int port) {
     perror("Failed to open socket.");
   }
 
+  set_nonblocking(sock);
+
   bzero(&addr, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
@@ -254,6 +266,8 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
 
   sock = accept(watcher->fd, (struct sockaddr *) &client_addr, &client_len);
 
+  set_nonblocking(sock);
+
   if (sock < 0) {
     perror("Error accepting socket.");
     return;
@@ -264,7 +278,7 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
 }
 
 void client_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
-  int res = 0;
+  int res = 1;
   if (revents & EV_READ) {
     res = read_cb(loop, watcher, revents);
   }
@@ -321,7 +335,7 @@ int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
       // broadcast
       int _len = strlen(msg) + strlen(user->name) + 2 + 3;
       char *_msg = (char *) malloc(sizeof(char) * _len);
-      snprintf(_msg, _len, "%s: %s\r\n\0", user->name, msg);
+      snprintf(_msg, _len, "%s: %s\r\n", user->name, msg);
       int count = broadcast_msg(users_head, node, _msg);
       printf("%s broadcast to %d users.\n", user->name, count);
     }
