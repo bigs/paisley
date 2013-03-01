@@ -1,5 +1,5 @@
 /*
- * Buffoon: A horn blaring server.
+ * paisley
  *
  */
 
