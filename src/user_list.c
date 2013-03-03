@@ -1,23 +1,23 @@
 #include <stdlib.h>
 #include <strings.h>
+#include <glib.h>
 
 #include "user_list.h"
-#include "buffer.h"
 
 struct user * new_user() {
   struct user *user = (struct user *) malloc(sizeof (struct user));
   bzero(user, sizeof(user));
 
-  user->out = new_buffer();
-  user->in = new_buffer();
+  user->out = g_string_new(NULL);
+  user->in = g_string_new(NULL);
 
   return user;
 }
 
 void free_user(struct user *user) {
-  free_buffer(user->out);
-  free_buffer(user->in);
-  if (user->name) free(user->name);
+  g_string_free(user->out, TRUE);
+  g_string_free(user->in, TRUE);
+  if (user->name) g_string_free(user->name, TRUE);
   free(user);
 }
 
@@ -49,7 +49,7 @@ struct user * get_user(struct user_node *head, char *name) {
   struct user *user = NULL;
 
   for (ptr = head; ptr != NULL; ptr = ptr->next) {
-    if (strcmp(ptr->user->name, name) == 0) {
+    if (strcmp(ptr->user->name->str, name) == 0) {
       user = ptr->user;
       break;
     }
@@ -74,3 +74,4 @@ void delete_node(struct user_node **users_head, struct user_node *node) {
   free_user(node->user);
   free(node);
 }
+

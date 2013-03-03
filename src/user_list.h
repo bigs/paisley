@@ -1,13 +1,15 @@
 #ifndef _USER_LIST_H_
 #define _USER_LIST_H_
 
+#include <glib.h>
+
 struct user {
   // user info
-  char *name;
+  GString *name;
 
   // buffers
-  struct buffer *in;
-  struct buffer *out;
+  GString *in;
+  GString *out;
 };
 
 struct user_node {
