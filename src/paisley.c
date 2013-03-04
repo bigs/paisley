@@ -14,6 +14,8 @@
 
 #include "user_list.h"
 #include "const.h"
+#include "paisley.h" // for users_head
+#include "irc.h"
 
 int set_nonblocking(int fd)
 {
@@ -30,20 +32,7 @@ void client_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 int write_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 
-struct user_node *users_head;
-
-int broadcast_msg(struct user_node *head, struct user_node *src, char *msg) {
-  int count = 0;
-  struct user_node *ptr;
-
-  for (ptr = head; ptr != NULL; ptr = ptr->next) {
-    if (ptr == src) continue;
-    g_string_append(ptr->user->out, msg);
-    count++;
-  }
-
-  return count;
-}
+struct user_node *users_head = NULL;
 
 int main(int argc, char **argv) {
   char *port = NULL;
@@ -209,8 +198,8 @@ int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     } else {
       // broadcast
       GString *_msg = g_string_new(NULL);
-      g_string_append_printf(_msg, "%s: %s\r\n", user->name->str, msg->str);
-      int count = broadcast_msg(users_head, node, _msg->str);
+      g_string_append_printf(_msg, "%s: %s", user->name->str, msg->str);
+      int count = irc_broadcast_msg(node, _msg);
       printf("%s broadcast to %d users.\n", user->name->str, count);
 
       g_string_free(_msg, TRUE);
