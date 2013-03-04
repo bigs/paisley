@@ -12,9 +12,8 @@
 #include <ev.h>
 #include <glib.h>
 
-#include "user_list.h"
 #include "const.h"
-#include "paisley.h" // for users_head
+#include "paisley.h"
 #include "irc.h"
 
 int set_nonblocking(int fd)
@@ -32,7 +31,7 @@ void client_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 int write_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 
-struct user_node *users_head = NULL;
+GHashTable *global_irc_users = NULL;
 
 int main(int argc, char **argv) {
   char *port = NULL;
@@ -80,7 +79,7 @@ void listen_loop(int port) {
   int addr_len = sizeof(addr);
   struct ev_io w_accept;
 
-  users_head = NULL;
+  global_irc_users = g_hash_table_new_full(NULL, g_str_equal, free, free_irc_user_object);
 
   // Open socket + set options
   if ((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
@@ -120,8 +119,8 @@ void accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
 
   // Allocate a new event watcher
   struct ev_io *w_client = (struct ev_io *) malloc(sizeof(struct ev_io));
-  struct user_node *node = insert_user(&users_head, new_user());
-  w_client->data = (void *) node;
+  irc_user_object *obj = new_irc_user_object(NULL, NULL, NULL);
+  w_client->data = (void *) obj;
 
   // Short circuit on error
   if (EV_ERROR & revents) {
@@ -155,8 +154,7 @@ void client_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
 }
 
 int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
-  struct user_node *node = (struct user_node *) watcher->data;
-  struct user *user = node->user;
+  irc_user_object *obj = (irc_user_object *) watcher->data;
 
   if (EV_ERROR & revents) {
     perror("Invalid event in read.");
@@ -174,33 +172,39 @@ int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     // Read socket is in charge of closing
     printf("Socket %d closed.\n", watcher->fd);
     ev_io_stop(loop, watcher);
-    delete_node(&users_head, node);
+
+    if (obj->user_data->nick)
+      delete_irc_user_object(obj->user_data->nick);
+    else
+      free_irc_user_object(obj);
+
     free(watcher);
     return 0;
   }
 
-  g_string_append_len(user->in, buf, read);
+  g_string_append_len(obj->in, buf, read);
 
   char *pos;
   GString *msg;
-  if ((pos = strchr(user->in->str, '\n')) != NULL) {
-    int len = pos - user->in->str - 1;
-    msg = g_string_new_len(user->in->str, len);
-    g_string_erase(user->in, 0, len + 2);
+  if ((pos = strchr(obj->in->str, '\n')) != NULL) {
+    int len = pos - obj->in->str - 1; // truncate \r
+    msg = g_string_new_len(obj->in->str, len);
+    g_string_erase(obj->in, 0, len + 2);
 
-    if (!user->name) {
+    if (!obj->user_data->nick) {
       if (strstr(msg->str, "USER ") == msg->str && msg->len > 5) {
-        int name_len = msg->len - 5 + 1;
+        int nick_len = msg->len - 5 + 1;
         g_string_erase(msg, 0, 5);
-        user->name = g_string_new(msg->str);
-        printf("User registered: %s\n", user->name->str);
+        obj->user_data->nick = g_string_new(msg->str);
+        printf("User registered: %s\n", obj->user_data->nick->str);
+        add_irc_user_object(obj);
       }
     } else {
       // broadcast
       GString *_msg = g_string_new(NULL);
-      g_string_append_printf(_msg, "%s: %s", user->name->str, msg->str);
-      int count = irc_broadcast_msg(node, _msg);
-      printf("%s broadcast to %d users.\n", user->name->str, count);
+      g_string_append_printf(_msg, "%s: %s", obj->user_data->nick->str, msg->str);
+      int count = irc_broadcast_msg(obj, _msg);
+      printf("%s broadcast to %d users.\n", obj->user_data->nick->str, count);
 
       g_string_free(_msg, TRUE);
     }
@@ -212,9 +216,8 @@ int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
 }
 
 int write_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
-  struct user_node *node = (struct user_node *) watcher->data;
-  struct user *user = node->user;
-  GString *buffer = user->out;
+  irc_user_object *obj = (irc_user_object *) watcher->data;
+  GString *buffer = obj->out;
 
   if (EV_ERROR & revents) {
     perror("Invalid event in read.");
