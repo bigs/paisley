@@ -51,8 +51,13 @@ void free_irc_user_from_hash(gpointer obj) {
   free_irc_user_object((irc_user_object *) obj);
 }
 
-void add_irc_user_object(irc_user_object *obj) {
-  g_hash_table_insert(global_irc_users, (gpointer) obj->user_data->nick->str, (gpointer) obj);
+int add_irc_user_object(irc_user_object *obj) {
+  if (!g_hash_table_contains(global_irc_users, (gpointer) obj->user_data->nick->str)) {
+    g_hash_table_insert(global_irc_users, (gpointer) obj->user_data->nick->str, (gpointer) obj);
+    return 1;
+  }
+
+  return 0;
 }
 
 void delete_irc_user_object(irc_user_object *obj) {
@@ -99,16 +104,21 @@ int irc_send_cstring(irc_user_object *dest, char *msg) {
 }
 
 int irc_parse_user_message(GString *msg, irc_user_object *src) {
-  return (parse_irc_user_msg(msg->str, src->user_data)) ? 1 : 0;
+  if (parse_irc_user_msg(msg->str, src->user_data)) {
+    if (src->user_data->nick) {
+      add_irc_user_object(src);
+    }
+    return 1;
+  }
+
+  return 0;
 }
 
 int irc_parse_nick_message(GString *msg, irc_user_object *src) {
   if (parse_irc_nick_msg(msg->str, src->user_data)) {
-    if (!(src->user_data->username && src->user_data->realname)) {
-      irc_send_cstring(src, "Error: Must register user first.");
-      return 0;
+    if (src->user_data->username && src->user_data->realname) {
+      add_irc_user_object(src);
     }
-    add_irc_user_object(src);
     return 1;
   } else {
     return 0;
@@ -117,14 +127,11 @@ int irc_parse_nick_message(GString *msg, irc_user_object *src) {
 
 int irc_parse_message(GString *msg, irc_user_object *src) {
   if (irc_parse_user_message(msg, src)) {
-    printf("[User] Username: %s, Realname: %s\n", src->user_data->username->str, src->user_data->realname->str);
     return 1;
   } else if (irc_parse_nick_message(msg, src)) {
-    printf("[Nick] %s\n", src->user_data->nick->str);
     return 1;
   } else {
     if (src->user_data->nick) {
-      printf("Broadcasting: %s\n", msg->str);
       irc_broadcast_msg(src, msg);
     }
   }

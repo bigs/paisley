@@ -41,7 +41,7 @@ irc_user_object * new_irc_user_object(GString *nick, GString *username, GString 
 void free_irc_user_object(irc_user_object *obj);
 void free_irc_user_from_hash(gpointer obj);
 
-void add_irc_user_object(irc_user_object *obj);
+int add_irc_user_object(irc_user_object *obj);
 void delete_irc_user_object(irc_user_object *obj);
 
 // irc functions
