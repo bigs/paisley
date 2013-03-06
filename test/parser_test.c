@@ -34,6 +34,8 @@ void parse_irc_user_msg_test() {
 
   int res = parse_irc_user_msg("USER", &foo);
   assert(!res);
+  res = parse_irc_user_msg("USER foo", &foo);
+  assert(!res);
   res = parse_irc_user_msg("user foo * bar", &foo);
   assert(!res);
   res = parse_irc_user_msg("USER foo * bar", &foo);

@@ -47,6 +47,8 @@ int parse_irc_user_msg(char *msg, irc_user *user) {
     }
   }
 
+  if (delim_count != 3) return 0;
+
   if (user->username) g_string_free(user->username, TRUE);
   if (user->realname) g_string_free(user->realname, TRUE);
   user->username = username;
