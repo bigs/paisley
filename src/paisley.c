@@ -79,7 +79,7 @@ void listen_loop(int port) {
   int addr_len = sizeof(addr);
   struct ev_io w_accept;
 
-  global_irc_users = g_hash_table_new_full(NULL, g_str_equal, free, free_irc_user_object);
+  global_irc_users = g_hash_table_new_full(NULL, g_str_equal, free, free_irc_user_from_hash);
 
   // Open socket + set options
   if ((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
@@ -174,7 +174,7 @@ int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     ev_io_stop(loop, watcher);
 
     if (obj->user_data->nick)
-      delete_irc_user_object(obj->user_data->nick);
+      delete_irc_user_object(obj);
     else
       free_irc_user_object(obj);
 

@@ -39,14 +39,21 @@ void free_irc_user(irc_user *user);
 
 irc_user_object * new_irc_user_object(GString *nick, GString *username, GString *realname);
 void free_irc_user_object(irc_user_object *obj);
+void free_irc_user_from_hash(gpointer obj);
 
 void add_irc_user_object(irc_user_object *obj);
 void delete_irc_user_object(irc_user_object *obj);
 
 // irc functions
+
 int irc_send(irc_user_object *dest, GString *msg);
-int irc_parse_message(GString *msg, irc_user_object *src);
 int irc_broadcast_msg(irc_user_object *src, GString *msg);
+
+// parsing 
+
+int irc_parse_message(GString *msg, irc_user_object *src);
+int irc_parse_user_message(GString *msg, irc_user_object *src);
+int irc_parse_nick_message(GString *msg, irc_user_object *src);
 
 #endif
 

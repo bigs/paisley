@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 #include <strings.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "irc.h"
 #include "paisley.h"
@@ -19,9 +20,9 @@ irc_user * new_irc_user(GString *nick, GString *username, GString *realname) {
 }
 
 void free_irc_user(irc_user *user) {
-  g_string_free(user->nick, TRUE);
-  g_string_free(user->username, TRUE);
-  g_string_free(user->realname, TRUE);
+  if (user->nick != NULL) g_string_free(user->nick, TRUE);
+  if (user->username != NULL) g_string_free(user->username, TRUE);
+  if (user->realname != NULL) g_string_free(user->realname, TRUE);
 
   free(user);
 }
@@ -43,6 +44,10 @@ void free_irc_user_object(irc_user_object *obj) {
   g_string_free(obj->out, TRUE);
 
   free(obj);
+}
+
+void free_irc_user_from_hash(gpointer obj) {
+  free_irc_user_object((irc_user_object *) obj);
 }
 
 void add_irc_user_object(irc_user_object *obj) {
@@ -83,9 +88,17 @@ int irc_send(irc_user_object *dest, GString *msg) {
   return 0;
 }
 
+
+
+int irc_parse_user_message(GString *msg, irc_user_object *src) {
+  return 1;
+}
+
+int irc_parse_nick_message(GString *msg, irc_user_object *src) {
+  return 1;
+}
+
 int irc_parse_message(GString *msg, irc_user_object *src) {
-
-
   return 0;
 }
 
