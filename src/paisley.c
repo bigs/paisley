@@ -79,7 +79,7 @@ void listen_loop(int port) {
   int addr_len = sizeof(addr);
   struct ev_io w_accept;
 
-  global_irc_users = g_hash_table_new_full(NULL, g_str_equal, free, free_irc_user_from_hash);
+  global_irc_users = g_hash_table_new_full(NULL, g_str_equal, NULL, free_irc_user_from_hash);
 
   // Open socket + set options
   if ((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
@@ -191,23 +191,7 @@ int read_cb(struct ev_loop *loop, struct ev_io *watcher, int revents) {
     msg = g_string_new_len(obj->in->str, len);
     g_string_erase(obj->in, 0, len + 2);
 
-    if (!obj->user_data->nick) {
-      if (strstr(msg->str, "USER ") == msg->str && msg->len > 5) {
-        int nick_len = msg->len - 5 + 1;
-        g_string_erase(msg, 0, 5);
-        obj->user_data->nick = g_string_new(msg->str);
-        printf("User registered: %s\n", obj->user_data->nick->str);
-        add_irc_user_object(obj);
-      }
-    } else {
-      // broadcast
-      GString *_msg = g_string_new(NULL);
-      g_string_append_printf(_msg, "%s: %s", obj->user_data->nick->str, msg->str);
-      int count = irc_broadcast_msg(obj, _msg);
-      printf("%s broadcast to %d users.\n", obj->user_data->nick->str, count);
-
-      g_string_free(_msg, TRUE);
-    }
+    irc_parse_message(msg, obj);
 
     g_string_free(msg, TRUE);
   }

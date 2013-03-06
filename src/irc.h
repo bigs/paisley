@@ -47,6 +47,7 @@ void delete_irc_user_object(irc_user_object *obj);
 // irc functions
 
 int irc_send(irc_user_object *dest, GString *msg);
+int irc_send_cstring(irc_user_object *dest, char *msg);
 int irc_broadcast_msg(irc_user_object *src, GString *msg);
 
 // parsing 
